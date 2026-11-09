@@ -74,6 +74,10 @@ MOUNT_NAMES = ("photobooth_gallery_pages", "photobooth_gallery_full")
 # files follow right after it, ahead of the camera originals (+2).
 SYNC_PRIORITY_MODIFIER = 1
 
+# The Synchronizer normally starts after this plugin, so what we hand it during startup is dropped.
+# Startup files are therefore sent again with the next change, and at the latest after this delay.
+REPUBLISH_DELAY_S = 15.0
+
 
 @dataclass(frozen=True)
 class ItemInfo:
@@ -100,7 +104,7 @@ class ItemInfo:
 
 @dataclass(frozen=True)
 class _Task:
-    kind: str  # "init" | "add" | "update" | "delete"
+    kind: str  # "init" | "add" | "update" | "delete" | "republish"
     path: Path | None = None
 
 
@@ -196,6 +200,10 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
         self._item_count: int = 0
         self._last_error: str | None = None
         self._qr_unavailable_warned = False
+        self._republish_timer: threading.Timer | None = None
+        # startup files that the Synchronizer may not have received yet (see REPUBLISH_DELAY_S)
+        self._carry_added: list[Path] = []
+        self._carry_deleted: list[Path] = []
 
     def __str__(self):
         return "Event Gallery"
@@ -212,10 +220,14 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
 
         self._gallery_dir = self.gallery_dir()
         self._last_error = None
+        self._carry_added, self._carry_deleted = [], []
         self._queue = queue.Queue()
         self._worker = threading.Thread(target=self._worker_loop, name="photobooth-gallery", daemon=True)
         self._worker.start()
         self._queue.put(_Task("init"))
+        self._republish_timer = threading.Timer(REPUBLISH_DELAY_S, self._queue.put, args=(_Task("republish"),))
+        self._republish_timer.daemon = True
+        self._republish_timer.start()
 
         if self._config.publishing.serve_locally:
             self._mount_local()
@@ -225,6 +237,10 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
     @hookimpl
     def stop(self):
         self._unmount_local()
+
+        if self._republish_timer:
+            self._republish_timer.cancel()
+            self._republish_timer = None
 
         if self._queue and self._worker:
             self._queue.put(None)
@@ -297,6 +313,8 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
             self.add_or_update(task.path)
         elif task.kind == "delete" and task.path is not None:
             self.remove(task.path)
+        elif task.kind == "republish":
+            self.publish([])  # sends whatever startup files are still carried
 
     # ------------------------------------------------------------------ gallery work
 
@@ -348,6 +366,11 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
 
         self._delete_local(removed_files)
         self.publish(changed, removed_files)
+
+        # The Synchronizer has usually not started yet and dropped that. Always resend the page and the
+        # manifest (even unchanged: an earlier session's upload may have been dropped the same way).
+        self._carry_added = list(dict.fromkeys([*changed, self._dir / PAGE_NAME, self._manifest_path]))
+        self._carry_deleted = removed_files
 
     def add_or_update(self, path: Path) -> None:
         info = self.lookup_item(path)
@@ -538,9 +561,16 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
         return True
 
     def publish(self, added: list[Path], deleted: list[Path] | None = None) -> None:
-        """Hand gallery files to the Synchronizer (and any other collection plugin) for upload."""
+        """Hand gallery files to the Synchronizer (and any other collection plugin) for upload.
+
+        Files carried over from startup go along with the first call. rclone skips files that are
+        already identical on the remote, so resending costs next to nothing.
+        """
         if not self._config.publishing.sync_via_synchronizer:
             return
+        added = [f for f in dict.fromkeys([*self._carry_added, *added]) if f.is_file()]
+        deleted = [f for f in dict.fromkeys([*self._carry_deleted, *(deleted or [])]) if not f.exists()]
+        self._carry_added, self._carry_deleted = [], []
         try:
             if deleted:
                 pm.hook.collection_files_deleted(files=list(deleted))

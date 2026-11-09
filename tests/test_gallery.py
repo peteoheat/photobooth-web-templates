@@ -23,6 +23,9 @@ class FakeSynchronizer:
         self.links = list(links)
         self.added: list[tuple[list[Path], int]] = []
         self.deleted: list[list[Path]] = []
+        # The real Synchronizer ignores these hooks until its own start() has run, which is normally
+        # after the gallery's start() (pluggy calls the most recently registered plugin first).
+        self.ready = True
 
     @photobooth.plugins.hookimpl
     def get_share_links(self, filepath_local, identifier):
@@ -30,11 +33,13 @@ class FakeSynchronizer:
 
     @photobooth.plugins.hookimpl
     def collection_files_added(self, files, priority_modifier):
-        self.added.append((list(files), priority_modifier))
+        if self.ready:
+            self.added.append((list(files), priority_modifier))
 
     @photobooth.plugins.hookimpl
     def collection_files_deleted(self, files):
-        self.deleted.append(list(files))
+        if self.ready:
+            self.deleted.append(list(files))
 
     def uploaded(self):
         return [Path(f).as_posix() for files, _ in self.added for f in files]
@@ -214,9 +219,54 @@ def test_backfill_on_start(env):
     run(env, "init")
     assert [e["filename"] for e in manifest(env)] == ["b.jpg", "a.jpg"]
 
+    run(env, "republish")  # sends the carried startup files
     env.sync.added.clear()
-    run(env, "init")  # nothing changed: nothing re-uploaded
+    run(env, "init")  # nothing changed: nothing re-uploaded (the page and manifest are only carried again)
     assert env.sync.added == []
+
+
+def test_startup_files_resent_when_synchronizer_starts_later(env):
+    """Found syncing to a real rclone remote: the page uploaded during startup never arrived."""
+    a = env.add_photo("a.jpg")
+    gone = env.add_photo("gone.jpg", minutes=1)
+    run(env, "add", a.processed)
+    run(env, "add", gone.processed)
+    gone.processed.unlink()
+    env.sync.added.clear()
+
+    env.sync.ready = False  # restart: the Synchronizer is not running yet while the gallery initializes
+    run(env, "init")
+    assert env.sync.added == [] and env.sync.deleted == []
+
+    env.sync.ready = True
+    b = env.add_photo("b.jpg", minutes=2)
+    run(env, "add", b.processed)
+    uploaded = env.sync.uploaded()
+    for name in ("index.html", "thumbs.json", "thumbs/b_thumb.jpg", "qrcodes/b_qrcode.svg"):
+        assert (env.dir / name).as_posix() in uploaded
+    assert {p.as_posix() for p in env.sync.deleted[0]} == {(env.dir / "thumbs/gone_thumb.jpg").as_posix(), (env.dir / "qrcodes/gone_qrcode.svg").as_posix()}
+
+    env.sync.added.clear()
+    c = env.add_photo("c.jpg", minutes=3)
+    run(env, "add", c.processed)  # carried files went out once; not again
+    assert (env.dir / "index.html").as_posix() not in env.sync.uploaded()
+
+
+def test_startup_files_resent_by_timer_without_new_photos(env, monkeypatch):
+    monkeypatch.setattr(pg, "REPUBLISH_DELAY_S", 0.3)
+    env.sync.ready = False
+    env.pm.hook.start()
+    try:
+        wait_for_items(env, 0)
+        env.sync.ready = True  # the Synchronizer finished starting
+        deadline = time.monotonic() + 5
+        while (env.dir / "index.html").as_posix() not in env.sync.uploaded():
+            assert time.monotonic() < deadline, "page was not resent"
+            time.sleep(0.05)
+        assert (env.dir / "thumbs.json").as_posix() in env.sync.uploaded()
+    finally:
+        env.pm.hook.stop()
+    assert env.gallery._republish_timer is None
 
 
 def test_events_are_kept_apart(env):

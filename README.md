@@ -76,6 +76,48 @@ Restart photobooth-app. "Event Gallery" now appears in Admin > Config under plug
 2. In **Admin > Config > Event Gallery**: enable it, set the event title, pick a theme, save, and reload services.
 3. Take a photo, then open `http://<photobooth>:8000/media/gallery/<event>/` or the same path on your web host.
 
+## Publishing to your web host with the Synchronizer
+
+There is nothing gallery-specific to configure in the Synchronizer: everything the gallery needs
+lives under `media/`, which is exactly what the Synchronizer uploads.
+
+| Local (photobooth-data) | On the remote |
+|---|---|
+| `media/processed_full/IMG.jpg` | `<subdir>/media/processed_full/IMG.jpg` |
+| `media/gallery/<event>/index.html`, `thumbs.json` | `<subdir>/media/gallery/<event>/...` |
+| `media/gallery/<event>/thumbs/`, `qrcodes/` | `<subdir>/media/gallery/<event>/...` |
+| *(Synchronizer's own share page)* | `<subdir>/index.html` |
+
+Files reach the remote in two ways; either one alone is enough:
+
+* **Immediate sync** (live): the gallery hands every new or changed file to the Synchronizer right
+  after the photo, and removes deleted ones. The page and manifest written at startup are sent again
+  with the first photo, and at the latest 15 s after startup, because the Synchronizer starts after this plugin.
+* **Regular sync** (every *full_sync_interval* minutes, and once at startup): mirrors all of `media/`,
+  so it also repairs anything missed, for example uploads made while offline.
+
+In **Admin > Config > Synchronizer**, for your remote:
+
+1. `enabled`, and `enable_immediate_sync` on for a live gallery; keep `enable_regular_sync` on as the safety net.
+2. `name` / `subdir`: the folder you serve on the web, e.g. `subdir = event123` served as `https://example.com/event123/`.
+   **The folder must already exist on the remote**; otherwise immediate sync skips the remote ("not available").
+3. Share link (the QR code): `shareconfig.enabled`, and `manual_public_link` pointing at the uploaded photo,
+   e.g. `https://example.com/event123/media/processed_full/{filename}` (optionally through the share page).
+4. Mind `copy_only_mode`: when on, deletions are not propagated (removed photos keep their thumbnail and QR
+   file on the host, although they disappear from the gallery page). When off, the Synchronizer owns
+   `<subdir>/media/` and deletes anything there that isn't on the photobooth, so put extra files
+   (e.g. `robots.txt`) outside `media/`.
+
+The gallery is then at `https://example.com/event123/media/gallery/<event>/`. The web server must serve
+`index.html` for a directory URL (most do; on S3 enable static website hosting, or link to `.../index.html`).
+
+Check the online copy is complete: `index.html`, `thumbs.json`, `thumbs/` and `qrcodes/` should be in
+`<subdir>/media/gallery/<event>/`, with the photos in `<subdir>/media/processed_full/`.
+
+> **Windows booths:** photobooth-app v9.0.1's immediate sync fails on Windows for every file, photos
+> included (it passes rclone `media\processed_full\...` with backslashes; rclone.log shows
+> `operations/copyfile: object not found`). Only regular sync works there. Raspberry Pi / Linux is not affected.
+
 ## Configuration
 
 Stored in `photobooth-data/config/plugin_photobooth_gallery.json`, edited in the admin UI.

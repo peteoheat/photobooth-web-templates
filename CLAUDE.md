@@ -29,6 +29,12 @@ Synchronizer plugin upload it.
   `media/` in regular sync. Our own files come back through our hook; `_is_gallery_file` filters them (avoid loops).
 - No plugin API for HTTP routes: local serving inserts Starlette `Mount`s at the front of `photobooth.application.app.router.routes`.
 - `utils.media_resizer.resize` uses simplejpeg DCT scaling for JPEGs: output is >= the requested length (1/2, 1/4, 1/8 steps), not <=.
+- pluggy calls the most recently registered plugin first, so our `start` runs before the Synchronizer's; its
+  `collection_files_added` returns early until its pipeline exists -> startup publishes are dropped. Fixed by carrying
+  startup files (`_carry_added/_deleted`) into the next publish and a `republish` task after `REPUBLISH_DELAY_S`.
+- Synchronizer immediate sync is broken on Windows upstream (`f"{task.file}"` -> backslashes -> rclone "object not found").
+  To test immediate sync on Windows, start the app via a launcher that patches `immediate_synchronizer.CopyOperation`
+  to use '/' in `src_remote`. Regular sync works on Windows. A local folder works as remote: `name = "C:\\"`, `subdir = <path>`.
 - `PathType` (photobooth-app) has no `cache_ok`, so the first query on `Mediaitem` in a process logs a SAWarning. Upstream, harmless.
 
 ## Windows file-replace races (found running the real app on Windows)

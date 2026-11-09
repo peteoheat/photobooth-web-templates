@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "photobooth-gallery"
+dynamic = ["version"]
+description = "photobooth-app plugin: per-event web gallery with thumbnails and download QR codes"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "peteoheat" }]
+requires-python = ">=3.11"
+keywords = ["photobooth", "photobooth-app", "gallery", "thumbnails", "qrcode", "plugin"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "photobooth-app>=9.0.0",
+    "segno>=1.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/peteoheat/photobooth-gallery"
+Issues = "https://github.com/peteoheat/photobooth-gallery/issues"
+
+# photobooth-app loads pip-installed plugins from this entry-point group (see
+# photobooth/plugins/__init__.py: ENTRY_POINT_GROUP). The value must be the module that
+# contains the class; the class name is derived from the module name: PhotoboothGallery.
+[project.entry-points.photobooth11]
+photobooth_gallery = "photobooth_gallery.photobooth_gallery"
+
+[project.optional-dependencies]
+test = ["pytest", "pillow", "pydantic-settings", "pluggy"]
+
+[tool.setuptools]
+packages = ["photobooth_gallery"]
+
+[tool.setuptools.package-data]
+photobooth_gallery = ["templates/*.html"]
+
+[tool.setuptools.dynamic]
+version = { attr = "photobooth_gallery.photobooth_gallery.__version__" }
+
+[tool.ruff]
+line-length = 150
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

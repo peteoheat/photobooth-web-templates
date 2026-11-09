@@ -28,6 +28,23 @@ Synchronizer plugin upload it.
 - Synchronizer uploads any file under `./media/` passed to `collection_files_added` (paths must be relative to cwd) and mirrors
   `media/` in regular sync. Our own files come back through our hook; `_is_gallery_file` filters them (avoid loops).
 - No plugin API for HTTP routes: local serving inserts Starlette `Mount`s at the front of `photobooth.application.app.router.routes`.
+- `utils.media_resizer.resize` uses simplejpeg DCT scaling for JPEGs: output is >= the requested length (1/2, 1/4, 1/8 steps), not <=.
+- `PathType` (photobooth-app) has no `cache_ok`, so the first query on `Mediaitem` in a process logs a SAWarning. Upstream, harmless.
+
+## Windows file-replace races (found running the real app on Windows)
+
+- Writer: `os.replace` onto `thumbs.json` fails with PermissionError while a reader has it open -> `_replace_with_retry`.
+- Reader: Starlette `FileResponse` stats then streams; a replace in between gives "Response content longer than Content-Length",
+  and opening during the replace gives PermissionError -> `GalleryFiles` serves `.json` from one read, retries, else 503.
+- Tests that poll the manifest from another thread must tolerate read errors (`wait_for_items`).
+
+## Testing against the real photobooth-app
+
+Clone photobooth-app, `uv sync`, `uv pip install segno` into its `.venv`, then run pytest with that interpreter **from a scratch
+directory** (importing `photobooth` creates `media/`, `config/`, `database/`... in the cwd). `conftest.STUBBED` is False then.
+End-to-end: scratch photobooth-data with `plugins/photobooth_gallery/` + `config/plugin_photobooth_gallery.json`
+(`{"common": {"enabled": true}}`), `python -m photobooth --port 8010`, capture via `GET /api/actions/image/0`,
+delete via `DELETE /api/mediacollection/{id}`, filter via `PATCH /api/filter/{id}?filter=FilterPilgram2._1977`.
 
 ## Conventions
 

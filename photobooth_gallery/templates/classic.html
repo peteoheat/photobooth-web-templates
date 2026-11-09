@@ -158,6 +158,7 @@
       let current = -1;          // index of the item open in the viewer
       let loadedOnce = false;
       let lastText = '';
+      let retryTimer = null;     // quick retry while the first load fails
 
       const keyOf = (it) => it.id || it.full;
       const versioned = (url, it) => (it.revision ? url + (url.includes('?') ? '&' : '?') + 'v=' + it.revision : url);
@@ -234,7 +235,10 @@
           render(Array.isArray(data) ? data.filter((x) => x && x.full && x.thumb) : []);
         } catch (err) {
           console.warn('gallery: could not load', MANIFEST, err);
-          if (!loadedOnce) message.textContent = 'The gallery could not be loaded. Please try again shortly.';
+          if (!loadedOnce) {
+            message.textContent = 'The gallery could not be loaded yet. Retrying…';
+            if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; load(); }, 2000);
+          }
         }
       }
 

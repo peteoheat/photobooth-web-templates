@@ -82,6 +82,21 @@ def manifest(env):
     return json.loads((env.dir / "thumbs.json").read_text(encoding="utf-8"))
 
 
+def wait_for_items(env, count, timeout=10):
+    """Poll the manifest the worker thread writes. On Windows a read can briefly fail while the file is replaced."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            entries = manifest(env)
+            if len(entries) == count:
+                return entries
+        except (OSError, ValueError):
+            pass
+        if time.monotonic() > deadline:
+            raise AssertionError(f"manifest did not reach {count} entries within {timeout}s")
+        time.sleep(0.05)
+
+
 def run(env, kind, path=None):
     env.gallery.process(pg._Task(kind, Path(path) if path else None))
 
@@ -111,7 +126,8 @@ def test_add_creates_thumbnail_qrcode_manifest_and_page(env):
     # full URL resolves to the photo from the page's folder (same layout locally and on the web host)
     assert (env.dir / entry["full"]).resolve() == info.processed.resolve()
     with Image.open(env.dir / entry["thumb"]) as thumb:
-        assert max(thumb.size) <= 400
+        # photobooth-app's fast JPEG scaler rounds up to 1/2, 1/4 or 1/8 of the original
+        assert 400 <= max(thumb.size) < 1200
     assert (env.dir / entry["qrcode"]).read_text(encoding="utf-8").lstrip().startswith("<svg")
 
     page = (env.dir / "index.html").read_text(encoding="utf-8")
@@ -250,6 +266,29 @@ def test_corrupt_manifest_is_backed_up(env):
     assert len(manifest(env)) == 1
 
 
+def test_manifest_write_retries_while_file_is_open_on_windows(env, monkeypatch):
+    """Found running the real app on Windows: replacing thumbs.json while the web server streams it fails."""
+    real_replace, calls = pg.os.replace, []
+
+    def flaky_replace(src, dst):
+        calls.append(dst)
+        if len(calls) <= 2:
+            raise PermissionError(5, "Access is denied")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(pg.os, "replace", flaky_replace)
+    info = env.add_photo("a.jpg")
+    run(env, "add", info.processed)
+    assert [e["filename"] for e in manifest(env)] == ["a.jpg"]
+    assert not list(env.dir.rglob("*.tmp"))
+
+    monkeypatch.setattr(pg.os, "replace", lambda src, dst: (_ for _ in ()).throw(PermissionError(5, "Access is denied")))
+    monkeypatch.setattr(pg.time, "sleep", lambda s: None)
+    with pytest.raises(PermissionError):
+        pg.atomic_write(env.dir / "x.json", "{}")
+    assert not list(env.dir.rglob("*.tmp"))  # temp file cleaned up after giving up
+
+
 def test_custom_template(env, tmp_path):
     custom = tmp_path / "userdata" / "mine.html"
     custom.parent.mkdir()
@@ -275,12 +314,7 @@ def test_hooks_end_to_end_with_worker_thread(env):
     env.pm.hook.start()
     try:
         env.pm.hook.collection_files_added(files=[info.processed], priority_modifier=-1)
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            if (env.dir / "thumbs.json").exists() and manifest(env):
-                break
-            time.sleep(0.05)
-        assert [e["filename"] for e in manifest(env)] == ["a.jpg"]
+        assert [e["filename"] for e in wait_for_items(env, 1)] == ["a.jpg"]
 
         stats = [s for s in env.pm.hook.get_stats() if s]
         assert stats and any(sub.name == "Items in gallery" and sub.val == 1 for sub in stats[0].stats)
@@ -299,8 +333,11 @@ def test_disabled_plugin_does_nothing(env):
 
 
 def test_serves_gallery_locally(env, monkeypatch):
+    import importlib.util
+
     starlette = pytest.importorskip("starlette")
-    pytest.importorskip("httpx")
+    if not (importlib.util.find_spec("httpx2") or importlib.util.find_spec("httpx")):
+        pytest.skip("starlette's TestClient needs httpx2 (or httpx)")
     from starlette.applications import Starlette
     from starlette.responses import PlainTextResponse
     from starlette.routing import Mount, Route
@@ -317,14 +354,14 @@ def test_serves_gallery_locally(env, monkeypatch):
     env.gallery.start()
     try:
         env.gallery._queue.put(pg._Task("add", info.processed))
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and not ((env.dir / "thumbs.json").exists() and manifest(env)):
-            time.sleep(0.05)
+        wait_for_items(env, 1)
 
         client = TestClient(app)
         page = client.get("/media/gallery/One-NT-Party/")
         assert page.status_code == 200 and "One NT &lt;Party&gt;" in page.text
-        assert client.get("/media/gallery/One-NT-Party/thumbs.json").json()[0]["filename"] == "a.jpg"
+        manifest_response = client.get("/media/gallery/One-NT-Party/thumbs.json")
+        assert manifest_response.json()[0]["filename"] == "a.jpg"
+        assert manifest_response.headers["cache-control"] == "no-cache"
         assert client.get("/media/processed_full/a.jpg").headers["content-type"] == "image/jpeg"
         assert client.get("/media/gallery/One-NT-Party/qrcodes/a_qrcode.svg").status_code == 200
         assert client.get("/media/full/123").text == "media api"  # existing routes untouched

@@ -90,7 +90,7 @@ Stored in `photobooth-data/config/plugin_photobooth_gallery.json`, edited in the
 | common | `custom_template` | *(empty)* | Your HTML template, e.g. `userdata/my_gallery.html`. |
 | common | `poll_seconds` | `10` | How often an open page checks for new photos; 0 = off. |
 | media | `media_types` | image, collage, animation | Also `video`, `multicamera` (shown as looping video thumbnails). |
-| media | `thumbnail_length` | `400` | Longest side of thumbnails in pixels. |
+| media | `thumbnail_length` | `400` | Minimum longest side of thumbnails in pixels (photobooth-app's fast JPEG scaler rounds up, to at most about twice this). |
 | media | `backfill_on_start` | `false` | Add everything already in the collection on startup. |
 | qrcode | `enabled` | `true` | Show the download QR code. |
 | qrcode | `share_link_index` | `0` | Which share link to use when several are configured. |
@@ -131,6 +131,8 @@ A JSON list, newest first. The first four keys are the pibooth-gallery contract.
 * Local serving: photobooth-app has no plugin API for web routes, so the plugin inserts two static
   mounts (`/media/gallery`, `/media/processed_full`) at the front of the running app's routes,
   and removes them on stop. Turn off `serve_locally` if that is ever a problem.
+* A one-time `SAWarning: TypeDecorator PathType() will not produce a cache key` in the log comes from
+  photobooth-app's database column type (the first query on its media table triggers it) and is harmless.
 * Protecting the online gallery (e.g. with [gallery-protect](https://github.com/peteoheat/gallery-protect)) works as before, since it is plain static files.
 * The page has `noindex` set. Add a `robots.txt` on your host as well if you want.
 

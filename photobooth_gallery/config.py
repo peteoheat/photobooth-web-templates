@@ -59,7 +59,8 @@ class Media(BaseModel):
         default=400,
         ge=100,
         le=1500,
-        description="Size of the generated thumbnails in pixels.",
+        description="Minimum length of the longest thumbnail side in pixels. JPEGs are scaled by photobooth-app's fast scaler "
+        "(1/2, 1/4 or 1/8 of the original), so thumbnails can come out up to about twice this size.",
     )
     backfill_on_start: bool = Field(
         default=False,

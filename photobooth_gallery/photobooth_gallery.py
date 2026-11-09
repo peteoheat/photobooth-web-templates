@@ -40,6 +40,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime
@@ -126,10 +127,26 @@ def atomic_write(path: Path, data: str | bytes) -> None:
         with os.fdopen(fd, mode, encoding=encoding) as fh:
             fh.write(data)
         os.chmod(tmp, 0o644)  # mkstemp creates 0600; keep it readable for web servers
-        os.replace(tmp, path)
+        _replace_with_retry(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _replace_with_retry(src: Path, dst: Path, attempts: int = 10) -> None:
+    """``os.replace`` that tolerates Windows refusing to replace a file someone has open.
+
+    On Windows the gallery's own web server (or a virus scanner, OneDrive, ...) briefly holding
+    ``thumbs.json`` open makes the rename fail with PermissionError. Linux never does this.
+    """
+    for attempt in range(attempts):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def load_manifest(path: Path) -> list[dict]:
@@ -543,13 +560,31 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
             logger.info("gallery: photobooth web app not loaded; not serving the gallery locally")
             return
         try:
+            from starlette.responses import Response
             from starlette.routing import Mount
             from starlette.staticfiles import StaticFiles
+
+            class GalleryFiles(StaticFiles):
+                """Serve the manifest from one read: it is replaced while pages poll it, and the default
+                stat-then-stream response fails ("content longer than Content-Length") if that happens in between.
+                On Windows, opening it during the replace itself fails briefly, so retry, then ask the page to retry."""
+
+                def file_response(self, full_path, stat_result, scope, status_code=200):
+                    if not str(full_path).endswith(".json"):
+                        return super().file_response(full_path, stat_result, scope, status_code)
+                    for attempt in range(5):
+                        try:
+                            with open(full_path, "rb") as fh:
+                                body = fh.read()
+                            return Response(body, status_code=status_code, media_type="application/json", headers={"Cache-Control": "no-cache"})
+                        except PermissionError:
+                            time.sleep(0.01 * (attempt + 1))
+                    return Response(status_code=503, headers={"Retry-After": "1", "Cache-Control": "no-cache"})
 
             self._unmount_local()
             GALLERY_ROOT.mkdir(parents=True, exist_ok=True)
             routes = app.router.routes
-            routes.insert(0, Mount(URL_GALLERY, app=StaticFiles(directory=GALLERY_ROOT.resolve(), html=True), name=MOUNT_NAMES[0]))
+            routes.insert(0, Mount(URL_GALLERY, app=GalleryFiles(directory=GALLERY_ROOT.resolve(), html=True), name=MOUNT_NAMES[0]))
             routes.insert(1, Mount(URL_PROCESSED, app=StaticFiles(directory=Path(PATH_PROCESSED).resolve()), name=MOUNT_NAMES[1]))
         except Exception as exc:
             logger.warning(f"gallery: could not serve the gallery locally: {exc}")

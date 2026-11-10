@@ -53,9 +53,9 @@ from photobooth.models.genericstats import GenericStats, SubStats
 from photobooth.plugins import hookimpl, pm
 from photobooth.plugins.base_plugin import BasePlugin
 
-from .config import PhotoboothGalleryConfig
+from .config import GalleryConfig
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 logger = logging.getLogger(__name__)
 
@@ -189,10 +189,10 @@ def sort_newest_first(entries: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 
-class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
+class Gallery(BasePlugin[GalleryConfig]):
     def __init__(self):
         super().__init__()
-        self._config: PhotoboothGalleryConfig = PhotoboothGalleryConfig()
+        self._config: GalleryConfig = GalleryConfig()
 
         self._queue: queue.Queue[_Task | None] | None = None
         self._worker: threading.Thread | None = None
@@ -206,7 +206,7 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
         self._carry_deleted: list[Path] = []
 
     def __str__(self):
-        return "Event Gallery"
+        return "Gallery"
 
     # ------------------------------------------------------------------ hooks
 
@@ -254,7 +254,7 @@ class PhotoboothGallery(BasePlugin[PhotoboothGalleryConfig]):
     def get_stats(self) -> GenericStats | None:
         if not self._config.common.enabled or not self._gallery_dir:
             return None
-        stats = GenericStats(id="hook-plugin-photobooth-gallery", name="Event Gallery")
+        stats = GenericStats(id="hook-plugin-photobooth-gallery", name="Gallery")
         stats.stats.append(SubStats("Event", self._config.common.event_title))
         stats.stats.append(SubStats("Items in gallery", self._item_count))
         stats.stats.append(SubStats("Pending", self._queue.qsize() if self._queue else 0))

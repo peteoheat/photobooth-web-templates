@@ -11,8 +11,8 @@ Synchronizer plugin upload it.
 
 | Path | Purpose |
 |---|---|
-| `photobooth_gallery/photobooth_gallery.py` | The plugin. Class `PhotoboothGallery` (name is derived by photobooth-app from the module name: `photobooth_gallery` -> `PhotoboothGallery`). `__version__` lives here. |
-| `photobooth_gallery/config.py` | pydantic-settings config (`BaseConfig`), shown in the admin UI, saved to `config/plugin_photobooth_gallery.json`. |
+| `photobooth_gallery/gallery.py` | The plugin. Class `Gallery` (name is derived by photobooth-app from the module name: `gallery` -> `Gallery`). `__version__` lives here. |
+| `photobooth_gallery/config.py` | pydantic-settings config `GalleryConfig` (`BaseConfig`), shown in the admin UI, saved to `config/plugin_photobooth_gallery.json` (name kept from 1.0 so settings survive the rename). |
 | `photobooth_gallery/templates/` | `classic.html`, `snowflake.html`: self-contained pages (no external resources, works on offline hotspots). |
 | `tests/` | pytest. `conftest.py` stubs the photobooth modules when photobooth-app isn't installed. |
 
@@ -20,6 +20,8 @@ Synchronizer plugin upload it.
 
 - Plugins: pluggy project `"photobooth-app"`; hookspecs in `photobooth/plugins/__init__.py`. Pip plugins load from entry point group
   **`photobooth11`** (the docs say `photobooth.plugins`; the code wins). User plugins: `photobooth-data/plugins/<name>/<name>.py`.
+- Plugins register under their module `__name__`. The admin config page labels them `name.replace('_',' ').split('.').pop()`
+  (CSS-capitalised), so `photobooth_gallery.gallery` shows as "Gallery"; the config `title` is not used for that label.
 - Cwd is `photobooth-data`. Paths are relative: `media/processed_full/` (photos), `cache/` (app thumbnails), `userdata/`, `config/`.
 - `collection_files_added(files, priority_modifier)` only passes paths; the plugin looks up the `Mediaitem` by `processed` path in
   SQLite to get id/type/show_in_gallery/revision. Collage parts have `show_in_gallery=False`. Camera originals also arrive (ignored).
@@ -48,7 +50,7 @@ Synchronizer plugin upload it.
 
 Clone photobooth-app, `uv sync`, `uv pip install segno` into its `.venv`, then run pytest with that interpreter **from a scratch
 directory** (importing `photobooth` creates `media/`, `config/`, `database/`... in the cwd). `conftest.STUBBED` is False then.
-End-to-end: scratch photobooth-data with `plugins/photobooth_gallery/` + `config/plugin_photobooth_gallery.json`
+End-to-end: scratch photobooth-data with `plugins/gallery/` (copy of `photobooth_gallery/`) + `config/plugin_photobooth_gallery.json`
 (`{"common": {"enabled": true}}`), `python -m photobooth --port 8010`, capture via `GET /api/actions/image/0`,
 delete via `DELETE /api/mediacollection/{id}`, filter via `PATCH /api/filter/{id}?filter=FilterPilgram2._1977`.
 

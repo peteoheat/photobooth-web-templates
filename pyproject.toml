@@ -28,9 +28,10 @@ Issues = "https://github.com/peteoheat/photobooth-gallery/issues"
 
 # photobooth-app loads pip-installed plugins from this entry-point group (see
 # photobooth/plugins/__init__.py: ENTRY_POINT_GROUP). The value must be the module that
-# contains the class; the class name is derived from the module name: PhotoboothGallery.
+# contains the class; the class name is derived from the module name (gallery -> Gallery), and
+# the admin UI labels the plugin with the module name's last part ("Gallery").
 [project.entry-points.photobooth11]
-photobooth_gallery = "photobooth_gallery.photobooth_gallery"
+photobooth_gallery = "photobooth_gallery.gallery"
 
 [project.optional-dependencies]
 test = ["pytest", "pillow", "pydantic-settings", "pluggy"]
@@ -42,7 +43,7 @@ packages = ["photobooth_gallery"]
 photobooth_gallery = ["templates/*.html"]
 
 [tool.setuptools.dynamic]
-version = { attr = "photobooth_gallery.photobooth_gallery.__version__" }
+version = { attr = "photobooth_gallery.gallery.__version__" }
 
 [tool.ruff]
 line-length = 150

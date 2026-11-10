@@ -59,11 +59,17 @@ pip install git+https://github.com/peteoheat/photobooth-gallery.git
 ```
 
 **Option B: user plugin folder.** Copy the `photobooth_gallery` folder into
-`photobooth-data/plugins/`, so you have `photobooth-data/plugins/photobooth_gallery/photobooth_gallery.py`,
-and install the QR code library into photobooth-app's environment (e.g. `pipx inject photobooth-app segno`).
+`photobooth-data/plugins/` **renamed to `gallery`**, so you have `photobooth-data/plugins/gallery/gallery.py`
+(photobooth-app loads `plugins/<name>/<name>.py`), and install the QR code library into photobooth-app's
+environment (e.g. `pipx inject photobooth-app segno`).
 Without `segno` the gallery still works, but without QR codes (a warning is logged).
 
-Restart photobooth-app. "Event Gallery" now appears in Admin > Config under plugins.
+Restart photobooth-app. "Gallery" now appears in Admin > Config under plugins.
+
+> **Upgrading from 1.0:** the plugin module was renamed from `photobooth_gallery.py` to `gallery.py`
+> so the admin pages say "Gallery". Settings are kept. With Option B, delete the old
+> `plugins/photobooth_gallery/` folder and copy the new one as `plugins/gallery/`; an old folder
+> left behind stops photobooth-app from starting.
 
 > The photobooth-app documentation names the entry point group `photobooth.plugins`; the
 > app's code (v9) actually reads `photobooth11`, which is what this package registers.
@@ -73,7 +79,7 @@ Restart photobooth-app. "Event Gallery" now appears in Admin > Config under plug
 1. In **Admin > Config > Synchronizer**, set up your remote and share link as usual
    (`manual_public_link`, optionally with the share page). That link becomes the QR code.
    Keep *immediate sync* enabled so the gallery updates live.
-2. In **Admin > Config > Event Gallery**: enable it, set the event title, pick a theme, save, and reload services.
+2. In **Admin > Config > Gallery**: enable it, set the event title, pick a theme, save, and reload services.
 3. Take a photo, then open `http://<photobooth>:8000/media/gallery/<event>/` or the same path on your web host.
 
 ## Publishing to your web host with the Synchronizer

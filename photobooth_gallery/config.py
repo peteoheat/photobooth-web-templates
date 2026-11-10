@@ -100,9 +100,9 @@ class Publishing(BaseModel):
     )
 
 
-class PhotoboothGalleryConfig(BaseConfig):
+class GalleryConfig(BaseConfig):
     model_config = SettingsConfigDict(
-        title="Event Gallery",
+        title="Gallery",
         json_file=f"{CONFIG_PATH}plugin_photobooth_gallery.json",
         env_prefix="photobooth_gallery-",
     )

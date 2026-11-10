@@ -11,7 +11,7 @@ import pytest
 from PIL import Image
 
 import photobooth.plugins
-from photobooth_gallery import photobooth_gallery as pg
+from photobooth_gallery import gallery as pg
 
 PHOTOS = Path("media/processed_full")
 
@@ -63,13 +63,13 @@ def env(tmp_path, monkeypatch):
     pm.register(sync, name="synchronizer")
 
     db: dict[str, pg.ItemInfo] = {}
-    gallery = pg.PhotoboothGallery()
+    gallery = pg.Gallery()
     gallery._config.common.enabled = True
     gallery._config.common.event_title = "One NT <Party>"
     gallery._config.publishing.serve_locally = False
     gallery.lookup_item = lambda path: db.get(Path(path).as_posix())
     gallery.list_items = lambda: sorted(db.values(), key=lambda i: i.created_at)
-    pm.register(gallery, name="photobooth_gallery")
+    pm.register(gallery, name="photobooth_gallery.gallery")
 
     base = datetime(2026, 11, 9, 20, 0, 0)
 

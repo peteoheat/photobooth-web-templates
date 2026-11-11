@@ -1,5 +1,5 @@
 """
-photobooth-gallery: per-event web gallery plugin for photobooth-app.
+photobooth-web-templates: per-event web gallery plugin for photobooth-app.
 
 For every item that photobooth-app adds to its collection (and shows in its own gallery) the
 plugin, in a background thread:
@@ -53,9 +53,9 @@ from photobooth.models.genericstats import GenericStats, SubStats
 from photobooth.plugins import hookimpl, pm
 from photobooth.plugins.base_plugin import BasePlugin
 
-from .config import GalleryConfig
+from .config import WebTemplatesConfig
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ TEMPLATE_DIR = Path(__file__).parent / "templates"
 
 URL_GALLERY = "/media/gallery"
 URL_PROCESSED = "/media/processed_full"
-MOUNT_NAMES = ("photobooth_gallery_pages", "photobooth_gallery_full")
+MOUNT_NAMES = ("photobooth_web_templates_pages", "photobooth_web_templates_full")
 
 # Synchronizer priority is 10 + modifier, lower runs first. The photo itself uses -1, so gallery
 # files follow right after it, ahead of the camera originals (+2).
@@ -168,9 +168,9 @@ def load_manifest(path: Path) -> list[dict]:
     backup = path.with_name(path.name + ".bak")
     try:
         os.replace(path, backup)
-        logger.warning(f"gallery: {path} unreadable ({reason}); moved to {backup}, starting a new manifest")
+        logger.warning(f"web-templates: {path} unreadable ({reason}); moved to {backup}, starting a new manifest")
     except OSError as exc:
-        logger.warning(f"gallery: {path} unreadable ({reason}) and could not be backed up ({exc})")
+        logger.warning(f"web-templates: {path} unreadable ({reason}) and could not be backed up ({exc})")
     return []
 
 
@@ -189,10 +189,10 @@ def sort_newest_first(entries: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 
 
-class Gallery(BasePlugin[GalleryConfig]):
+class WebTemplates(BasePlugin[WebTemplatesConfig]):
     def __init__(self):
         super().__init__()
-        self._config: GalleryConfig = GalleryConfig()
+        self._config: WebTemplatesConfig = WebTemplatesConfig()
 
         self._queue: queue.Queue[_Task | None] | None = None
         self._worker: threading.Thread | None = None
@@ -206,7 +206,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         self._carry_deleted: list[Path] = []
 
     def __str__(self):
-        return "Gallery"
+        return "Web Templates"
 
     # ------------------------------------------------------------------ hooks
 
@@ -215,14 +215,14 @@ class Gallery(BasePlugin[GalleryConfig]):
         self.stop()  # idempotent: never leave a second worker or duplicate mounts behind
 
         if not self._config.common.enabled:
-            logger.info("gallery: plugin disabled in config")
+            logger.info("web-templates: plugin disabled in config")
             return
 
         self._gallery_dir = self.gallery_dir()
         self._last_error = None
         self._carry_added, self._carry_deleted = [], []
         self._queue = queue.Queue()
-        self._worker = threading.Thread(target=self._worker_loop, name="photobooth-gallery", daemon=True)
+        self._worker = threading.Thread(target=self._worker_loop, name="photobooth-web-templates", daemon=True)
         self._worker.start()
         self._queue.put(_Task("init"))
         self._republish_timer = threading.Timer(REPUBLISH_DELAY_S, self._queue.put, args=(_Task("republish"),))
@@ -232,7 +232,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         if self._config.publishing.serve_locally:
             self._mount_local()
 
-        logger.info(f"gallery: event '{self._config.common.event_title}' in {self._gallery_dir}, local URL {URL_GALLERY}/{self._gallery_dir.name}/")
+        logger.info(f"web-templates: event '{self._config.common.event_title}' in {self._gallery_dir}, local URL {URL_GALLERY}/{self._gallery_dir.name}/")
 
     @hookimpl
     def stop(self):
@@ -246,7 +246,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             self._queue.put(None)
             self._worker.join(timeout=10)
             if self._worker.is_alive():
-                logger.warning("gallery: worker did not finish within 10s")
+                logger.warning("web-templates: worker did not finish within 10s")
         self._queue = None
         self._worker = None
 
@@ -254,7 +254,7 @@ class Gallery(BasePlugin[GalleryConfig]):
     def get_stats(self) -> GenericStats | None:
         if not self._config.common.enabled or not self._gallery_dir:
             return None
-        stats = GenericStats(id="hook-plugin-photobooth-gallery", name="Gallery")
+        stats = GenericStats(id="hook-plugin-photobooth-web-templates", name="Web Templates")
         stats.stats.append(SubStats("Event", self._config.common.event_title))
         stats.stats.append(SubStats("Items in gallery", self._item_count))
         stats.stats.append(SubStats("Pending", self._queue.qsize() if self._queue else 0))
@@ -304,7 +304,7 @@ class Gallery(BasePlugin[GalleryConfig]):
                 self.process(task)
             except Exception as exc:
                 self._last_error = f"{task.kind} {task.path or ''}: {exc}"
-                logger.exception(f"gallery: {task.kind} failed for {task.path}")
+                logger.exception(f"web-templates: {task.kind} failed for {task.path}")
 
     def process(self, task: _Task) -> None:
         if task.kind == "init":
@@ -341,7 +341,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         for entry in entries:
             full = entry.get("full")
             if full and not (self._dir / unquote(full)).is_file():
-                logger.info(f"gallery: {entry.get('filename')} no longer exists, removing it from the gallery")
+                logger.info(f"web-templates: {entry.get('filename')} no longer exists, removing it from the gallery")
                 removed_files.extend(self._entry_files(entry))
             else:
                 kept.append(entry)
@@ -353,7 +353,7 @@ class Gallery(BasePlugin[GalleryConfig]):
                     try:
                         entry, files = self._build_entry(info)
                     except Exception as exc:
-                        logger.warning(f"gallery: backfill of {info.processed} failed: {exc}")
+                        logger.warning(f"web-templates: backfill of {info.processed} failed: {exc}")
                         continue
                     kept.append(entry)
                     changed.extend(files)
@@ -375,7 +375,7 @@ class Gallery(BasePlugin[GalleryConfig]):
     def add_or_update(self, path: Path) -> None:
         info = self.lookup_item(path)
         if info is None:
-            logger.debug(f"gallery: {path} is not a collection item, ignored")
+            logger.debug(f"web-templates: {path} is not a collection item, ignored")
             return
 
         entries = load_manifest(self._manifest_path)
@@ -390,7 +390,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         entries.append(entry)
         self._write_manifest(entries)
         self.publish([*files, self._manifest_path])
-        logger.info(f"gallery: {'updated' if existing else 'added'} {info.processed.name} ({self._item_count} items)")
+        logger.info(f"web-templates: {'updated' if existing else 'added'} {info.processed.name} ({self._item_count} items)")
 
     def remove(self, path: Path) -> None:
         name = Path(path).name
@@ -402,7 +402,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         files = [f for e in gone for f in self._entry_files(e)]
         self._delete_local(files)
         self.publish([self._manifest_path], files)
-        logger.info(f"gallery: removed {name} ({self._item_count} items)")
+        logger.info(f"web-templates: removed {name} ({self._item_count} items)")
 
     def _wanted(self, info: ItemInfo) -> bool:
         return info.show_in_gallery and info.media_type in self._config.media.media_types
@@ -455,7 +455,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             try:
                 file.unlink(missing_ok=True)
             except OSError as exc:
-                logger.warning(f"gallery: could not delete {file}: {exc}")
+                logger.warning(f"web-templates: could not delete {file}: {exc}")
 
     def _write_manifest(self, entries: list[dict]) -> None:
         entries = sort_newest_first(entries)
@@ -481,7 +481,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             if common.custom_template and custom.is_file():
                 template = custom
             else:
-                logger.warning(f"gallery: custom template '{common.custom_template}' not found, using the classic theme")
+                logger.warning(f"web-templates: custom template '{common.custom_template}' not found, using the classic theme")
 
         replacements = {
             "{{TITLE}}": html.escape(common.event_title),
@@ -531,19 +531,19 @@ class Gallery(BasePlugin[GalleryConfig]):
             results = pm.hook.get_share_links(filepath_local=info.processed, identifier=info.id)
             links = [link for result in results for link in (result or []) if link]
         except Exception as exc:
-            logger.warning(f"gallery: could not get share links for {info.processed.name}: {exc}")
+            logger.warning(f"web-templates: could not get share links for {info.processed.name}: {exc}")
 
         index = self._config.qrcode.share_link_index
         if links:
             if index >= len(links):
-                logger.warning(f"gallery: share_link_index {index} but only {len(links)} share link(s); using the first")
+                logger.warning(f"web-templates: share_link_index {index} but only {len(links)} share link(s); using the first")
                 index = 0
             return links[index]
 
         fallback = self._config.qrcode.fallback_url
         if fallback:
             return fallback.replace("{filename}", info.processed.name).replace("{identifier}", str(info.id))
-        logger.debug(f"gallery: no share link for {info.processed.name}; no QR code")
+        logger.debug(f"web-templates: no share link for {info.processed.name}; no QR code")
         return None
 
     def make_qrcode(self, url: str, target: Path) -> bool:
@@ -551,7 +551,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             import segno
         except ImportError:
             if not self._qr_unavailable_warned:
-                logger.warning("gallery: python package 'segno' is not installed; QR codes are skipped (pip install segno)")
+                logger.warning("web-templates: python package 'segno' is not installed; QR codes are skipped (pip install segno)")
                 self._qr_unavailable_warned = True
             return False
 
@@ -577,7 +577,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             if added:
                 pm.hook.collection_files_added(files=list(dict.fromkeys(added)), priority_modifier=SYNC_PRIORITY_MODIFIER)
         except Exception as exc:
-            logger.warning(f"gallery: handing files to the synchronizer failed: {exc}")
+            logger.warning(f"web-templates: handing files to the synchronizer failed: {exc}")
 
     def _mount_local(self) -> None:
         """Serve media/gallery and media/processed_full from photobooth-app's own web server.
@@ -587,7 +587,7 @@ class Gallery(BasePlugin[GalleryConfig]):
         """
         app = getattr(sys.modules.get("photobooth.application"), "app", None)
         if app is None:
-            logger.info("gallery: photobooth web app not loaded; not serving the gallery locally")
+            logger.info("web-templates: photobooth web app not loaded; not serving the gallery locally")
             return
         try:
             from starlette.responses import Response
@@ -617,7 +617,7 @@ class Gallery(BasePlugin[GalleryConfig]):
             routes.insert(0, Mount(URL_GALLERY, app=GalleryFiles(directory=GALLERY_ROOT.resolve(), html=True), name=MOUNT_NAMES[0]))
             routes.insert(1, Mount(URL_PROCESSED, app=StaticFiles(directory=Path(PATH_PROCESSED).resolve()), name=MOUNT_NAMES[1]))
         except Exception as exc:
-            logger.warning(f"gallery: could not serve the gallery locally: {exc}")
+            logger.warning(f"web-templates: could not serve the gallery locally: {exc}")
 
     @staticmethod
     def _unmount_local() -> None:

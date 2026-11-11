@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "photobooth-gallery"
+name = "photobooth-web-templates"
 dynamic = ["version"]
 description = "photobooth-app plugin: per-event web gallery with thumbnails and download QR codes"
 readme = "README.md"
@@ -23,27 +23,27 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/peteoheat/photobooth-gallery"
-Issues = "https://github.com/peteoheat/photobooth-gallery/issues"
+Homepage = "https://github.com/peteoheat/photobooth-web-templates"
+Issues = "https://github.com/peteoheat/photobooth-web-templates/issues"
 
 # photobooth-app loads pip-installed plugins from this entry-point group (see
 # photobooth/plugins/__init__.py: ENTRY_POINT_GROUP). The value must be the module that
-# contains the class; the class name is derived from the module name (gallery -> Gallery), and
-# the admin UI labels the plugin with the module name's last part ("Gallery").
+# contains the class; the class name is derived from the module name (web_templates -> WebTemplates), and
+# the admin UI labels the plugin with the module name's last part ("Web Templates").
 [project.entry-points.photobooth11]
-photobooth_gallery = "photobooth_gallery.gallery"
+photobooth_web_templates = "photobooth_web_templates.web_templates"
 
 [project.optional-dependencies]
 test = ["pytest", "pillow", "pydantic-settings", "pluggy"]
 
 [tool.setuptools]
-packages = ["photobooth_gallery"]
+packages = ["photobooth_web_templates"]
 
 [tool.setuptools.package-data]
-photobooth_gallery = ["templates/*.html"]
+photobooth_web_templates = ["templates/*.html"]
 
 [tool.setuptools.dynamic]
-version = { attr = "photobooth_gallery.gallery.__version__" }
+version = { attr = "photobooth_web_templates.web_templates.__version__" }
 
 [tool.ruff]
 line-length = 150

@@ -1,4 +1,4 @@
-# photobooth-gallery
+# photobooth-web-templates
 
 A plugin for [photobooth-app](https://photobooth-app.org) that builds a **per-event web gallery**:
 a page of thumbnails that open the full photo, each with the **download QR code** the
@@ -51,25 +51,26 @@ photobooth-app finds it through its `photobooth11` entry point group.
 
 ```bash
 # if photobooth-app was installed with pipx:
-pipx inject photobooth-app git+https://github.com/peteoheat/photobooth-gallery.git
+pipx inject photobooth-app git+https://github.com/peteoheat/photobooth-web-templates.git
 # or with uv tool:
-uv tool install photobooth-app --with git+https://github.com/peteoheat/photobooth-gallery.git
+uv tool install photobooth-app --with git+https://github.com/peteoheat/photobooth-web-templates.git
 # or plain pip inside photobooth-app's virtual environment:
-pip install git+https://github.com/peteoheat/photobooth-gallery.git
+pip install git+https://github.com/peteoheat/photobooth-web-templates.git
 ```
 
-**Option B: user plugin folder.** Copy the `photobooth_gallery` folder into
-`photobooth-data/plugins/` **renamed to `gallery`**, so you have `photobooth-data/plugins/gallery/gallery.py`
+**Option B: user plugin folder.** Copy the `photobooth_web_templates` folder into
+`photobooth-data/plugins/` **renamed to `web_templates`**, so you have `photobooth-data/plugins/web_templates/web_templates.py`
 (photobooth-app loads `plugins/<name>/<name>.py`), and install the QR code library into photobooth-app's
 environment (e.g. `pipx inject photobooth-app segno`).
 Without `segno` the gallery still works, but without QR codes (a warning is logged).
 
-Restart photobooth-app. "Gallery" now appears in Admin > Config under plugins.
+Restart photobooth-app. "Web Templates" now appears in Admin > Config under plugins.
 
-> **Upgrading from 1.0:** the plugin module was renamed from `photobooth_gallery.py` to `gallery.py`
-> so the admin pages say "Gallery". Settings are kept. With Option B, delete the old
-> `plugins/photobooth_gallery/` folder and copy the new one as `plugins/gallery/`; an old folder
-> left behind stops photobooth-app from starting.
+> **Upgrading from 1.x:** the project was renamed to *web-templates* (plugin label "Web Templates") because
+> "Gallery" is already a photobooth-app term. Uninstall `photobooth-gallery`, install `photobooth-web-templates`,
+> and rename `config/plugin_photobooth_gallery.json` to `config/plugin_photobooth_web_templates.json` to keep your
+> settings. With Option B, delete the old `plugins/gallery/` folder first; an old folder left behind registers a second
+> plugin. Gallery pages stay at `media/gallery/<event>/`, so existing URLs keep working.
 
 > The photobooth-app documentation names the entry point group `photobooth.plugins`; the
 > app's code (v9) actually reads `photobooth11`, which is what this package registers.
@@ -79,7 +80,7 @@ Restart photobooth-app. "Gallery" now appears in Admin > Config under plugins.
 1. In **Admin > Config > Synchronizer**, set up your remote and share link as usual
    (`manual_public_link`, optionally with the share page). That link becomes the QR code.
    Keep *immediate sync* enabled so the gallery updates live.
-2. In **Admin > Config > Gallery**: enable it, set the event title, pick a theme, save, and reload services.
+2. In **Admin > Config > Web Templates**: enable it, set the event title, pick a theme, save, and reload services.
 3. Take a photo, then open `http://<photobooth>:8000/media/gallery/<event>/` or the same path on your web host.
 
 ## Publishing to your web host with the Synchronizer
@@ -126,7 +127,7 @@ Check the online copy is complete: `index.html`, `thumbs.json`, `thumbs/` and `q
 
 ## Configuration
 
-Stored in `photobooth-data/config/plugin_photobooth_gallery.json`, edited in the admin UI.
+Stored in `photobooth-data/config/plugin_photobooth_web_templates.json`, edited in the admin UI.
 
 | Group | Option | Default | Description |
 |---|---|---|---|
@@ -150,7 +151,7 @@ Stored in `photobooth-data/config/plugin_photobooth_gallery.json`, edited in the
 
 Any HTML file. These placeholders are replaced: `{{TITLE}}`, `{{SUBTITLE}}` (HTML-escaped),
 `{{MANIFEST}}` (`thumbs.json`) and `{{POLL_SECONDS}}`. The page fetches the manifest relative to itself.
-Start by copying `photobooth_gallery/templates/classic.html`.
+Start by copying `photobooth_web_templates/templates/classic.html`.
 
 ### Manifest (`thumbs.json`)
 

@@ -1,7 +1,7 @@
-"""Configuration for the photobooth-gallery plugin.
+"""Configuration for the photobooth-web-templates plugin.
 
 Shown automatically in the photobooth-app admin UI (Admin > Config > Plugins) because the
-plugin assigns an instance to ``self._config``. Persisted to ``config/plugin_photobooth_gallery.json``.
+plugin assigns an instance to ``self._config``. Persisted to ``config/plugin_photobooth_web_templates.json``.
 """
 
 from typing import Literal
@@ -100,11 +100,11 @@ class Publishing(BaseModel):
     )
 
 
-class GalleryConfig(BaseConfig):
+class WebTemplatesConfig(BaseConfig):
     model_config = SettingsConfigDict(
-        title="Gallery",
-        json_file=f"{CONFIG_PATH}plugin_photobooth_gallery.json",
-        env_prefix="photobooth_gallery-",
+        title="Web Templates",
+        json_file=f"{CONFIG_PATH}plugin_photobooth_web_templates.json",
+        env_prefix="photobooth_web_templates-",
     )
 
     common: Common = Common()
